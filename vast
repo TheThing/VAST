@@ -1,0 +1,70 @@
+#!/usr/bin/zsh
+
+###     Paths
+filtering="Working Script.vpy"
+interlaced_filtering="Interlaced Working Script.vpy"
+temp="TemporaryFolder"
+
+###     Find Video files, Begin Loop
+find $1 -type f \( -name "*.mkv" -o -name "*.mp4" \) -print0 | while IFS= read -r -d '' video_path; do
+
+###     Temporary folder for scenes file
+mkdir $temp
+
+###     File Handling
+working_directory="${video_path%/*}"
+filename="${video_path##*/}"
+extension="${filename##*.}"
+noextension="${filename%.*}"
+tempname="${noextension}.mkv"
+problem=false
+
+###     Determine interlacing
+interlacing=$(ffprobe -v quiet -select_streams v -show_entries stream=field_order -of csv=p=0 "$video_path")
+
+if [ "$interlacing" = "tb" ]; then
+    ###     Replace source in filtering .vpy
+    sed -i '11d' "$interlaced_filtering"
+    sed -i "11isource = '$(realpath "$video_path")'" "$interlaced_filtering"
+
+    ###     Filter Video
+    vspipe "$interlaced_filtering" -c y4m - | ffmpeg -nostdin -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
+
+elif [ "$interlacing" = "progressive" ]; then
+    ###     Replace source in filtering .vpy
+    sed -i '11d' "$filtering"
+    sed -i "11isource = '$(realpath "$video_path")'" "$filtering"
+
+    ###     Filter Video
+    vspipe "$filtering" -c y4m - | ffmpeg -nostdin -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
+
+else
+    problem=true
+fi
+
+if  [ "$problem" = false ]; then
+###     Encode Video
+av1an -e svt-av1 -v " --crf 17 --preset 2 --tune 3 --noise-norm-strength 3" \
+    -m bestsource --verbose --force -w 2 -c mkvmerge \
+    -i "$temp/$noextension-filtered.mkv" \
+    -o "$temp/$noextension-encoded.mkv"
+
+###     Run FFVship to create Metric JSONs and Graphs
+FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
+FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" --json "$temp/$noextension-ssimu2.json"
+python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
+
+###     Mux audio from source video with encoded video
+ffmpeg -an -i "$temp/$noextension-encoded.mkv" -vn -i "$video_path" \
+    -c:v copy -c:a copy \
+    "$working_directory/$noextension-encoded.mkv"
+
+else
+fi
+
+###     Remove temporary folder
+rm -rf $temp
+
+#konsole --noclose -e echo Hello!
+done
