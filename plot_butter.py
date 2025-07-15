@@ -30,8 +30,25 @@ except (TypeError, IndexError):
 
 frames = range(len(scores))
 
+plt.style.use('dark_background')
+
+colors = {
+    'main_line': '#1e6b63',     #
+    'ewma': '#a1e3cd',          #
+    'rolling_p': '#32afa3',     #
+    'mean': '#E57373',          #
+    'percentile': '#E6E473',    #
+    'max_min': '#73B9E6',       #
+    'background': '#1e1e2e',    #
+    'legend_face': '#313244',   #
+    'legend_edge': '#777b92',   #
+    'text': '#cdd6f4'           #
+}
+
 fig, ax = plt.subplots(figsize=(19.2, 10.8), layout='constrained')
-ax.plot(frames, scores, linewidth=1.0)
+fig.patch.set_facecolor(colors['background'])
+ax.set_facecolor(colors['background'])
+ax.plot(frames, scores, linewidth=1.5, color=colors['main_line'], alpha=0.8)
 
 ###     Calculate Statistics
 overall_mean = np.mean(scores)
@@ -41,11 +58,11 @@ overall_max = np.max(scores)
 overall_min = np.min(scores)
 
 ###     Plot Reference Lines
-ax.axhline(overall_mean, color='r', linestyle='--', linewidth=1, label='Overall Mean')
-ax.axhline(percentile_5, color='purple', linestyle='--', linewidth=1, label='5th Percentile')
-ax.axhline(percentile_95, color='purple', linestyle='--', linewidth=1, label='95th Percentile')
-ax.axhline(overall_max, color='g', linestyle='--', linewidth=1, label='Overall Max')
-ax.axhline(overall_min, color='g', linestyle='--', linewidth=1, label='Overall Min')
+ax.axhline(overall_mean, color=colors['mean'], linestyle='--', linewidth=1, label='Mean')
+ax.axhline(percentile_5, color=colors['percentile'], linestyle='--', linewidth=1, label='5th Percentile')
+ax.axhline(percentile_95, color=colors['percentile'], linestyle='--', linewidth=1, label='95th Percentile')
+ax.axhline(overall_max, color=colors['max_min'], linestyle='--', linewidth=1, label='Maximum')
+ax.axhline(overall_min, color=colors['max_min'], linestyle='--', linewidth=1, label='Minimum')
 
 ###     Calculate Rolling Statistics
 scores_series = pd.Series(scores)
@@ -115,18 +132,26 @@ rolling_p90 = custom_rolling_quantile(scores_series, span_size, 0.90)
 x_rolling = np.array(range(len(ewm_mean)))
 x_shifted = x_rolling - offset
 
-ax.plot(x_shifted, ewm_mean, label=f'Exponentially Weighted Moving Average, Span={span_size}', color='darkred', linewidth=1)
-ax.plot(x_shifted, rolling_p10, label=f'Rolling 10th Percentile, Span={span_size}', color='indigo', linewidth=1)
-ax.plot(x_shifted, rolling_p90, label=f'Rolling 90th Percentile, Span={span_size}', color='indigo', linewidth=1)
+ax.plot(x_shifted, ewm_mean, label=f'Exponentially Weighted Moving Average, Span={span_size}', color=colors['ewma'], linewidth=1.5)
+ax.plot(x_shifted, rolling_p10, label=f'Rolling 10th Percentile, Span={span_size}', color=colors['rolling_p'], linewidth=1)
+ax.plot(x_shifted, rolling_p90, label=f'Rolling 90th Percentile, Span={span_size}', color=colors['rolling_p'], linewidth=1)
 
 ###     Set Plot Labels and Limits ---
 ax.set_xlim(0, len(frames) - 1 if frames else 0)
-ax.set_ylim(0, 5)
-ax.set_xlabel('Frame', fontdict={'fontsize': 18, 'color': 'darkblue'})
-ax.set_ylabel('Butteraugli 3-norm Score', fontdict={'fontsize': 22, 'color': 'darkblue'})
-ax.set_title('Butteraugli Scores per Frame', fontdict={'fontsize': 22, 'color': 'darkblue'})
-ax.grid(True)
-ax.legend()
+ax.set_ylim(0, round(overall_max + 1, 0))
+ax.set_xlabel('Frame', fontdict={'fontsize': 18, 'color': colors['text']})
+ax.set_ylabel('Butteraugli 3-norm Score', fontdict={'fontsize': 22, 'color': colors['text']})
+ax.set_title('Butteraugli Scores per Frame', fontdict={'fontsize': 22, 'color': colors['text']})
+ax.tick_params(axis='x', colors=colors['text'])
+ax.tick_params(axis='y', colors=colors['text'])
+ax.grid(True, which='both', linestyle='--', linewidth=0.5, color=colors['text'])
+ax.spines['bottom'].set_color(colors['text'])
+ax.spines['top'].set_color(colors['text'])
+ax.spines['right'].set_color(colors['text'])
+ax.spines['left'].set_color(colors['text'])
+legend = ax.legend(loc='upper left', facecolor=colors['legend_face'], edgecolor=colors['legend_edge'], framealpha=0.7)
+for text in legend.get_texts():
+    text.set_color(colors['text'])
 
 plt.savefig(png_file)
 plt.close()
