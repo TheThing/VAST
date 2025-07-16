@@ -2,7 +2,6 @@ import numpy as np
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
 import sys
 
 if len(sys.argv) != 3:
@@ -58,11 +57,11 @@ overall_max = np.max(scores)
 overall_min = np.min(scores)
 
 ###     Plot Reference Lines
-ax.axhline(overall_mean, color=colors['mean'], linestyle='--', linewidth=1, label='Mean')
-ax.axhline(percentile_5, color=colors['percentile'], linestyle='--', linewidth=1, label='5th Percentile')
-ax.axhline(percentile_95, color=colors['percentile'], linestyle='--', linewidth=1, label='95th Percentile')
-ax.axhline(overall_max, color=colors['max_min'], linestyle='--', linewidth=1, label='Maximum')
-ax.axhline(overall_min, color=colors['max_min'], linestyle='--', linewidth=1, label='Minimum')
+ax.axhline(overall_mean, color=colors['mean'], linestyle='--', linewidth=1, label=f'{overall_mean:.2f} - Mean')
+ax.axhline(percentile_95, color=colors['percentile'], linestyle='--', linewidth=1, label=f'{percentile_95:.2f} - 95th Percentile')
+ax.axhline(percentile_5, color=colors['percentile'], linestyle='--', linewidth=1, label=f'{percentile_5:.2f} - 5th Percentile') #
+ax.axhline(overall_max, color=colors['max_min'], linestyle='--', linewidth=1, label=f'{overall_max:.2f} - Maximum')
+ax.axhline(overall_min, color=colors['max_min'], linestyle='--', linewidth=1, label=f'{overall_min:.2f} - Minimum')
 
 ###     Calculate Rolling Statistics
 scores_series = pd.Series(scores)
@@ -132,9 +131,9 @@ rolling_p90 = custom_rolling_quantile(scores_series, span_size, 0.90)
 x_rolling = np.array(range(len(ewm_mean)))
 x_shifted = x_rolling - offset
 
-ax.plot(x_shifted, ewm_mean, label=f'Exponentially Weighted Moving Average, Span={span_size}', color=colors['ewma'], linewidth=1.5)
-ax.plot(x_shifted, rolling_p10, label=f'Rolling 10th Percentile, Span={span_size}', color=colors['rolling_p'], linewidth=1)
+ax.plot(x_shifted, ewm_mean, label=f'Exponentially Weighted Moving Average', color=colors['ewma'], linewidth=1.5)
 ax.plot(x_shifted, rolling_p90, label=f'Rolling 90th Percentile, Span={span_size}', color=colors['rolling_p'], linewidth=1)
+ax.plot(x_shifted, rolling_p10, label=f'Rolling 10th Percentile, Span={span_size}', color=colors['rolling_p'], linewidth=1)
 
 ###     Set Plot Labels and Limits ---
 ax.set_xlim(0, len(frames) - 1 if frames else 0)
