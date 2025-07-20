@@ -34,16 +34,14 @@ interlacing=$(ffprobe -v quiet -select_streams v -show_entries stream=field_orde
 
 if [ "$interlacing" = "tb" ]; then
     ###     Replace source in filtering .vpy
-    sed -i '11d' "$interlaced_filtering"
-    sed -i "11isource = '$(realpath "$video_path")'" "$interlaced_filtering"
+    sed -i "11c source = r'''$(realpath "$video_path")'''" "$interlaced_filtering"
 
     ###     Filter Video
     vspipe "$interlaced_filtering" -c y4m - | ffmpeg -nostdin -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
 
 elif [ "$interlacing" = "progressive" ]; then
     ###     Replace source in filtering .vpy
-    sed -i '11d' "$filtering"
-    sed -i "11isource = '$(realpath "$video_path")'" "$filtering"
+    sed -i "11c source = r'''$(realpath "$video_path")'''" "$filtering"
 
     ###     Filter Video
     vspipe "$filtering" -c y4m - | ffmpeg -nostdin -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
