@@ -6,7 +6,7 @@ interlaced_filtering="Interlaced Working Script.vpy"
 temp="TemporaryFolder"
 
 ###     Find Video files, Begin Loop
-find $1 -type f \( -name "*.mkv" -o -name "*.mp4" \) -print0 | while IFS= read -r -d '' video_path; do
+find $1 -type f \( -name "*.mkv" -o -name "*.mp4" -o -name "*.mov" \) -print0 | while IFS= read -r -d '' video_path; do
 
 ###     File Handling
 working_directory="${video_path%/*}"
