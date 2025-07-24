@@ -75,9 +75,9 @@ av1an -e svt-av1 -v " --crf 18 --preset 2 --tune 3 --noise-norm-strength 3 --lp 
     -o "$temp/$noextension-encoded.mkv"
 
 ###     Run FFVship to create Metric JSONs and Graphs
-FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
 python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
-FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" --json "$temp/$noextension-ssimu2.json"
+FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
 python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
 
 ###     Mux audio from source video with encoded video
