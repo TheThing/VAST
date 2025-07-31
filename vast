@@ -81,12 +81,15 @@ FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv"
 python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
 
 ###     Mux audio from source video with encoded video
-echo "= Muxing together encoded with original audio"
-ffmpeg -v quiet -stats -an -i "$temp/$noextension-encoded.mkv" -vn -i "$video_path" \
-    -c:v copy -c:a copy \
-    "$working_directory/$noextension-encoded.mkv"
+echo "= Extracting audio ="
+ffmpeg -v quiet -stats -vn -i "$video_path" -c:a copy "$temp/$noextension.mka"
 
+echo "= Muxing together encoded with original audio"
+mkvmerge --output "$working_directory/$noextension-encoded.mkv" "$temp/$noextension-encoded.mkv" "$temp/$noextension.mka"
+
+echo ""
 echo "= Cleaning up temporary data"
+echo ""
 ###     Remove temporary folder
 rm -rf $temp
 
