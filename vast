@@ -71,15 +71,15 @@ vspipe  "$temp/working.vpy" -p -c y4m - | ffmpeg -hide_banner -loglevel error -n
 echo "= Beginning main encode"
 
 ###     Encode Video
-av1an -e svt-av1 -v " --crf 19 --preset 2 --tune 3 --noise-norm-strength 3 --lp 12" \
+av1an -s "$temp/scenes.json" -e svt-av1 -v " --crf 19 --preset 2 --tune 3 --noise-norm-strength 3 --lp 12" \
     -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
     -i "$temp/$noextension-filtered.mkv" \
     -o "$temp/$noextension-encoded.mkv"
 
 ###     Run FFVship to create Metric JSONs and Graphs
-FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
 python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
-FFVship -s "$temp/$noextension-encoded.mkv" -e "$temp/$noextension-filtered.mkv" --json "$temp/$noextension-ssimu2.json"
+FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
 python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
 
 
@@ -90,7 +90,7 @@ cp "Image Downscale2.vpy" "$temp/web.vpy"
 ###     Replace source in filtering .vpy
 sed -i "11c source = r'''$(realpath "$temp/$noextension-encoded.mkv")'''" "$temp/web.vpy"
 
-av1an -e svt-av1 -v " --crf 31 --preset 3 --enable-qm=1 --fast-decode --lp 12" \
+av1an -s "$temp/scenes.json" -e svt-av1 -v " --crf 31 --preset 3 --lp 12" \
     -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
     -i "$temp/web.vpy" \
     -o "$temp/$noextension-web.mkv"
@@ -100,7 +100,7 @@ echo "= Extracting audio ="
 ffmpeg -v quiet -stats -vn -i "$video_path" -c:a copy "$temp/$noextension.mka" < /dev/null
 
 echo "= Creating web audio"
-ffmpeg -v quiet -stats -vn -i "$temp/$noextension.mka" -c:a libopus -b:a 128k "$temp/$noextension-web.mka" < /dev/null
+ffmpeg -y -v quiet -stats -vn -i "$temp/$noextension.mka" -c:a libopus -b:a 148k "$temp/$noextension-web.mka" < /dev/null
 
 echo "= Muxing encoded with original audio"
 mkvmerge --output "$working_directory/$noextension-encoded.mkv" "$temp/$noextension-encoded.mkv" "$temp/$noextension.mka"
