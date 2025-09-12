@@ -15,107 +15,197 @@ working_directory="${video_path%/*}"
 filename="${video_path##*/}"
 extension="${filename##*.}"
 noextension="${filename%.*}"
+temphash=enc_$(echo $noextension | rhash -C -p "%{crc32}" -)
 tempname="${noextension}.mkv"
 scriptname="$filtering"
 problem=false
 
-echo ""
-
 ###     Skip if already encoded
 if [[ "$filename" == *-encoded.* ]]; then
-    echo "-- Skipping already encoded file: $filename"
+    # echo "-- Skipping already encoded file: $filename"
     continue
 fi
-if [ -f "$working_directory/$noextension-encoded.mkv" ] || [ -f "$working_directory/$noextension-encoded.mp4" ]; then
-    echo "-- Encoded file already exists for: $filename"
-    continue
-fi
-
-###     Determine interlacing
-interlacing=$(ffprobe -v quiet -select_streams v -show_entries stream=field_order -of csv=p=0 "$video_path")
-
-if [[ "$interlacing" != "progressive" && "$interlacing" != "tb" ]]; then
-    echo "*****************************"
-    echo "* Unknown interlacing type encountered: $filename"
-    echo "* Interlacing type: $interlacing"
-    echo "*****************************"
+if [[ "$filename" == *-web.* ]]; then
+    # echo "-- Skipping already encoded file: $filename"
     continue
 fi
 
-###     Temporary folder for scenes file/filtering, etc.
-mkdir $temp
+#############################
+### Begin main encode section
+#############################
+if [ ! -f "$working_directory/$noextension-encoded.mkv" ] && [ ! -f "$working_directory/$noextension-encoded.mp4" ]; then
+  ###     Determine interlacing
+  interlacing=$(ffprobe -v error -select_streams v -show_entries stream=field_order -of csv=p=0 "$video_path")
 
-###     Select our script based on interlaced detection
-if [[ "$interlacing" == "tb" ]]; then
-    scriptname="$interlaced_filtering"
+  if [[ "$interlacing" != "progressive" && "$interlacing" != "tb" && "$interlacing" != "tb," ]]; then
+      echo "*****************************"
+      echo "* Unknown interlacing type encountered: $filename"
+      echo "* Interlacing type: $interlacing"
+      echo "*****************************"
+      continue
+  fi
+
+  ###     Temporary folder for scenes file/filtering, etc.
+  mkdir -p $temp
+
+  ###     Select our script based on interlaced detection
+  if [[ "$interlacing" == "tb" ]] || [[ "$interlacing" == "tb," ]]; then
+      scriptname="$interlaced_filtering"
+  else
+      scriptname="$filtering"
+  fi
+
+  echo "=========================="
+  echo "= $working_directory/$filename"
+  echo "= Script: $scriptname"
+  echo "=========================="
+
+  ###     Copy our selected script into the working directory
+  cp "$scriptname" "$temp/working.vpy"
+
+  ###     Replace source in filtering .vpy
+  sed -i "11c source = r'''$(realpath "$video_path")'''" "$temp/working.vpy"
+
+  if [ ! -f "$temp/$noextension-filtered.mkv" ]; then
+    echo "= Creating lossless intermediate..."
+
+    ###     Create our lossless intermediate
+    vspipe  "$temp/working.vpy" -p -c y4m - | ffmpeg -hide_banner -loglevel error -nostdin -y -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
+  else
+    echo "= Lossless intermediate found..."
+  fi
+
+  echo "= Beginning main encode"
+
+  ###     Encode Video
+
+  av1an -r -s "$temp/scenes.json" --temp "$(pwd)/$temphash/" -e svt-av1 -v " --crf 19 --preset 2 --tune 3 --noise-norm-strength 3 --lp 12" \
+      -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
+      -i "$temp/$noextension-filtered.mkv" \
+      -o "$temp/$noextension-encoded.mkv"
+
+  if [ $? != 0 ]; then
+    echo "= Av1an failed for some reason, doing simple attempts to fix"
+
+    exit 1
+
+    if [ -f "$temphash/options.json" ]; then
+      cd "$temphash/encode"
+
+      set -o pipefail
+
+      echo "= Found existing options, attempting manual mkvmerge"
+      mkvmerge "@../options.json" | tee ../mkvmerge_check.log
+
+      if [ $? != 0 ]; then
+        while IFS="" read -r p || [ -n "$p" ]
+        do
+          if [[ "$p" =~ ^Error[^\']+\'([^.]+\.ivf)+ ]]; then
+            echo "= Found error file ${match[1]}, removing"
+            mv ../done.json ../done_old.json
+            jq -r -c "del(.done.\"${match[1]:0:-4}\")" ../done_old.json > ../done.json
+            rm -f "${match[1]}"
+            rm -f ../done_old.json
+          fi
+        done < ../mkvmerge_check.log
+        echo "= Attempting again to run av1an with --resume"
+        cd ..
+        cd ..
+
+        av1an -r -s "$temp/scenes.json" --temp "$temphash" -e svt-av1 -v " --crf 19 --preset 2 --tune 3 --noise-norm-strength 3 --lp 12" \
+        -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
+        -i "$temp/$noextension-filtered.mkv" \
+        -o "$temp/$noextension-encoded.mkv"
+
+        if [ $? != 0 ]; then
+          echo "= Av1an failed a second time despite best efforts."
+          echo '=========== ERROR WHILE ENCODING $noextension SKIPPING ==========='
+          exit
+          continue
+        else
+          echo "= Managed to successfully repair encode, continuing our encode..."
+        fi
+
+      else
+        echo "= Manual mkvmerge worked successfully, continuing our encode..."
+      fi
+
+      set +o pipefail
+
+    else
+      echo '= Could not determine the problem...'
+      echo '=========== ERROR WHILE ENCODING $noextension SKIPPING ==========='
+      exit
+      continue
+    fi
+  fi
+
+
+  ###     Run FFVship to create Metric JSONs and Graphs
+  FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+  python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
+  FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
+  python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
+
+  ###     Mux audio from source video with encoded video
+  echo "= Extracting audio ="
+  ffmpeg -v error -stats -vn -i "$video_path" -c:a copy "$temp/$noextension.mka" < /dev/null
+
+  echo "= Counting number of channels"
+  num_channels=$(ffprobe -v error -i "$temp/$noextension.mka" -show_entries stream=channels -select_streams a -of compact=p=0:nk=1)
+
+  if [ "$num_channels" -gt 2 ]; then
+    echo "= Found more than 2 channels ($num_channels). Re-encoding audio to opus with only two channels"
+    mv "$temp/$noextension.mka" "$temp/$noextension-original.mka"
+    ffmpeg -y -v error -stats -vn -i "$temp/$noextension-original.mka" -c:a libopus -b:a 320k -ar 48000 -ac 2 "$temp/$noextension.mka" < /dev/null
+  fi
+
+  echo "= Muxing encoded with original audio"
+  mkvmerge --output "$working_directory/$noextension-encoded.mkv" "$temp/$noextension-encoded.mkv" "$temp/$noextension.mka"
 else
-    scriptname="$filtering"
+  echo "-- Encoded file already exists for: $filename"
 fi
 
-echo "=========================="
-echo "= $working_directory/$filename"
-echo "= Script: $scriptname"
-echo "=========================="
+#############################
+### Begin web encode section
+#############################
+if [ ! -f "$working_directory/$noextension-web.webm" ]; then
+  if [ ! -f "$working_directory/$noextension-encoded.mkv" ]; then
+    echo "-- Missing web version for $filename and could not find $noextension-encoded.mkv to make one"
+    continue
+  fi
 
-###     Copy our selected script into the working directory
-cp "$scriptname" "$temp/working.vpy"
+  ###     Copy our selected script into the working directory
+  echo "= Beginning creating web version"
+  cp "Image Downscale2.vpy" "$temp/web.vpy"
 
-###     Replace source in filtering .vpy
-sed -i "11c source = r'''$(realpath "$video_path")'''" "$temp/working.vpy"
+  ###     Replace source in filtering .vpy
+  sed -i "11c source = r'''$(realpath "$working_directory/$noextension-encoded.mkv")'''" "$temp/web.vpy"
 
-echo "= Creating lossless intermediate..."
+  av1an -s "$temp/scenes.json" -e svt-av1 -v " --crf 31 --preset 3 --lp 12" \
+      -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
+      -i "$temp/web.vpy" \
+      -o "$temp/$noextension-web.mkv"
 
-###     Create our lossless intermediate
-vspipe  "$temp/working.vpy" -p -c y4m - | ffmpeg -hide_banner -loglevel error -nostdin -y -i - -vcodec libx264 -preset faster -qp 0 "$temp/$noextension-filtered.mkv"
+  echo "= Creating web audio"
+  ffmpeg -y -v error -stats -vn -i "$working_directory/$noextension-encoded.mkv" -c:a libopus -b:a 148k "$temp/$noextension-web.mka" < /dev/null
 
-echo "= Beginning main encode"
-
-###     Encode Video
-av1an -s "$temp/scenes.json" -e svt-av1 -v " --crf 19 --preset 2 --tune 3 --noise-norm-strength 3 --lp 12" \
-    -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
-    -i "$temp/$noextension-filtered.mkv" \
-    -o "$temp/$noextension-encoded.mkv"
-
-###     Run FFVship to create Metric JSONs and Graphs
-FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
-python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
-FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
-python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
-
-
-###     Copy our selected script into the working directory
-echo "= Beginning creating web version"
-cp "Image Downscale2.vpy" "$temp/web.vpy"
-
-###     Replace source in filtering .vpy
-sed -i "11c source = r'''$(realpath "$temp/$noextension-encoded.mkv")'''" "$temp/web.vpy"
-
-av1an -s "$temp/scenes.json" -e svt-av1 -v " --crf 31 --preset 3 --lp 12" \
-    -m bestsource --verbose --force -w 16 --set-thread-affinity 8 -c mkvmerge \
-    -i "$temp/web.vpy" \
-    -o "$temp/$noextension-web.mkv"
-
-###     Mux audio from source video with encoded video
-echo "= Extracting audio ="
-ffmpeg -v quiet -stats -vn -i "$video_path" -c:a copy "$temp/$noextension.mka" < /dev/null
-
-echo "= Creating web audio"
-ffmpeg -y -v quiet -stats -vn -i "$temp/$noextension.mka" -c:a libopus -b:a 148k "$temp/$noextension-web.mka" < /dev/null
-
-echo "= Muxing encoded with original audio"
-mkvmerge --output "$working_directory/$noextension-encoded.mkv" "$temp/$noextension-encoded.mkv" "$temp/$noextension.mka"
-
-echo "= Muxing web with compressed audio"
-mkvmerge --output "$working_directory/$noextension-web.mkv" "$temp/$noextension-web.mkv" "$temp/$noextension-web.mka"
+  echo "= Muxing web with compressed audio"
+  mkvmerge --output "$working_directory/$noextension-web.webm" "$temp/$noextension-web.mkv" "$temp/$noextension-web.mka"
+else
+  echo "-- Web file already exists for: $filename"
+fi
 
 
 echo ""
 echo "= Cleaning up temporary data"
 echo ""
+
 ###     Remove temporary folder
 rm -rf $temp
 
+echo ""
+
 done
 
-echo ""
 echo "-- Finished archiving all found video files"
