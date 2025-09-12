@@ -30,6 +30,9 @@ if [[ "$filename" == *-web.* ]]; then
     continue
 fi
 
+###     Temporary folder for scenes file/filtering, etc.
+mkdir -p $temp
+
 #############################
 ### Begin main encode section
 #############################
@@ -44,9 +47,6 @@ if [ ! -f "$working_directory/$noextension-encoded.mkv" ] && [ ! -f "$working_di
       echo "*****************************"
       continue
   fi
-
-  ###     Temporary folder for scenes file/filtering, etc.
-  mkdir -p $temp
 
   ###     Select our script based on interlaced detection
   if [[ "$interlacing" == "tb" ]] || [[ "$interlacing" == "tb," ]]; then
