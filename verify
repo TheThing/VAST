@@ -1,0 +1,47 @@
+#!/usr/bin/zsh
+
+###     Paths
+temp="TemporaryFolder"
+
+rm -rf $temp
+
+###     Temporary folder for scenes file/filtering, etc.
+mkdir -p $temp
+
+
+echo "-- Verifying all files"
+
+###     Find Video files, Begin Loop
+find $1 -type f \( -name "*-encoded.mkv" \) -print0 | while IFS= read -r -d '' video_path; do
+
+###     File Handling
+working_directory="${video_path%/*}"
+filename="${video_path##*/}"
+extension="${filename##*.}"
+noextension="${filename%.*}"
+temphash=enc_$(echo $noextension | rhash -C -p "%{crc32}" -)
+
+#############################
+### MD5sum hashing
+#############################
+if [ ! -f "$working_directory/$noextension.framemd5" ]; then
+  echo "-- Unable to verify $video_path, missing framemd5"
+else
+  echo "-- Verifying $video_path"
+  ffmpeg -y -v error -stats -i "$video_path" -c copy -f framemd5 "$temp/$temphash.framemd5" < /dev/null
+
+  diff --brief "$working_directory/$noextension.framemd5" "$temp/$temphash.framemd5"
+  if [ $? != 0 ]; then
+    echo "****************************"
+    echo "* CORRUPTION FOUND IN $video_path"
+    echo "* Output diff: $temphash.framemd5"
+    echo "****************************"
+
+    cp "$temp/$temphash.framemd5" "./$temphash.framemd5"
+  fi
+fi
+
+done
+
+###     Remove temporary folder
+rm -rf $temp
