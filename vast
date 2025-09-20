@@ -176,7 +176,7 @@ if [ ! -f "$working_directory/$noextension-web.webm" ]; then
   fi
 
   ###     Copy our selected script into the working directory
-  echo "= Beginning creating web version"
+  echo "= Beginning creating web version $working_directory/$noextension-web.webm"
   cp "Image Downscale2.vpy" "$temp/web.vpy"
 
   ###     Replace source in filtering .vpy
@@ -192,8 +192,25 @@ if [ ! -f "$working_directory/$noextension-web.webm" ]; then
 
   echo "= Muxing web with compressed audio"
   mkvmerge --output "$working_directory/$noextension-web.webm" "$temp/$noextension-web.mkv" "$temp/$noextension-web.mka"
+
+  rm "$working_directory/$noextension*.lwi"
 else
   echo "-- Web file already exists for: $filename"
+fi
+
+#############################
+### MD5sum hashing
+#############################
+if [ ! -f "$working_directory/$noextension-encoded.framemd5" ]; then
+  if [ ! -f "$working_directory/$noextension-encoded.mkv" ]; then
+    echo "-- Missing framemd5 $filename and could not find $noextension-encoded.mkv to make one"
+    continue
+  fi
+
+  echo "= Creating framemd5"
+  ffmpeg -y -v error -stats -i "$working_directory/$noextension-encoded.mkv" -c copy -f framemd5 "$working_directory/$noextension-encoded.framemd5" < /dev/null
+else
+  echo "-- Framemd5 file already exists for: $filename"
 fi
 
 
