@@ -142,9 +142,19 @@ if [ ! -f "$working_directory/$noextension-encoded.mkv" ] && [ ! -f "$working_di
 
 
   ###     Run FFVship to create Metric JSONs and Graphs
+
+  # Run each attempt twice as it seems these can "randomly break" for no good reason -_-
   FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+  if [ $? != 0 ] || [ ! -f "$temp/$noextension-butter.json" ]; then
+    FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" -m Butteraugli --json "$temp/$noextension-butter.json"
+  fi
   python plot_butter.py "$temp/$noextension-butter.json" "$working_directory/$noextension-butter.png"
+
+
   FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
+  if [ $? != 0 ] || [ ! -f "$temp/$noextension-ssimu2.json" ]; then
+    FFVship -s "$temp/$noextension-filtered.mkv" -e "$temp/$noextension-encoded.mkv" --json "$temp/$noextension-ssimu2.json"
+  fi
   python plot_ssimu2.py "$temp/$noextension-ssimu2.json" "$working_directory/$noextension-ssimu2.png"
 
   ###     Mux audio from source video with encoded video
@@ -193,7 +203,7 @@ if [ ! -f "$working_directory/$noextension-web.webm" ]; then
   echo "= Muxing web with compressed audio"
   mkvmerge --output "$working_directory/$noextension-web.webm" "$temp/$noextension-web.mkv" "$temp/$noextension-web.mka"
 
-  rm "$working_directory/$noextension*.lwi"
+  rm "$working_directory/$noextension-encoded.mkv.lwi"
 else
   echo "-- Web file already exists for: $filename"
 fi
